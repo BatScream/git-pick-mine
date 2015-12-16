@@ -1,0 +1,67 @@
+#!/bin/sh
+set -e
+source_branch="$1"
+target_branch="$2"
+param="#@"
+cur_branch=$(git symbolic-ref --short HEAD)
+
+#validate parameter length
+
+if [ "$#" -lt 2 ]; then
+    echo "[git-pick-mine] Error - format: git-c source target"
+	exit
+fi
+
+# validate length of parameters  - other validations would
+# be performed by git implicitly
+
+for i in $param
+do
+    if [ -z $i ] ; then
+		echo "[git-pick-mine] Error - format: git-c source target"
+		exit
+	fi
+done
+
+
+_git_roll(){
+echo "$1.... $2"
+	echo "[git-pick-mine] switching back to $1" &&
+	git checkout $1 && 
+	if [ "$2" != "No local changes to save" ]; then
+		echo "[git-pick-mine] re-applying stashed items" &&
+		git stash pop
+	fi
+}
+
+# execute commands in sequence
+# on failure switch back.
+
+{
+	echo "[git-pick-mine] temporarily stashing local branch. you may have to manually pop, if you get a cherry-pick conflict. It is easy though." &&
+    stash_res=$(git stash) &&
+	
+	echo "[git-pick-mine] checking out source branch $source_branch" &&
+	git checkout $source_branch &&
+	
+	echo "[git-pick-mine] preparing your list of commits...Press 'q' once you identify your commits."
+	git log --author=$(git config --get user.name)
+	echo "[git-pick-mine] please enter commits you wish to merge to $branch, separated by space: "
+	read commit_list &&
+	
+	echo "[git-pick-mine] checking out target branch $target_branch"
+	git checkout $target_branch
+	
+	while true; do
+		read -p "[git-pick-mine] do you wish to continue? " yn
+		case $yn in
+			[Yy]* ) echo "[git-pick-mine] applying $commit_list" && git cherry-pick $commit_list; break;;
+			[Nn]* ) _git_roll "$cur_branch" "$stash_res"; break;;
+			* ) echo "[git-pick-mine] please answer yes or no.";;
+		esac
+	done
+} || 
+{
+	_git_roll "$cur_branch" "$stash_res"
+}
+exit
